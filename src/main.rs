@@ -34,6 +34,7 @@ fn main() {
 
     // Define the ODE system
     let ode = equation::ODE::new(
+        // This closure defines the ODEs for the system
         |x, p, _t, dx, _rateiv, _cov| {
             // fetch_params! is a macro that fetches the parameters from the parameter vector, and assigns them to the variables
             fetch_params!(
@@ -41,7 +42,6 @@ fn main() {
             );
 
             // We define x[0] as the state for pool A, and x[1] as the state for pool B
-            // We also define x[2] as the state for the total quantity
             let QA = x[0];
             let QB = x[1];
 
@@ -57,21 +57,24 @@ fn main() {
             dx[1] = fab - fba - fbo; // Rate of change for pool B
             dx[2] = FOA - fbo; // Rate of change for total system
         },
-        |p| {
-            fetch_params!(p, _ka, _ke, tlag, _v);
-            lag! {0=>tlag}
+        // This closure defines the lag-time of bolus doses, e.g. the time it takes for the dose to start absorbing
+        |_p| {
+            lag! {}
         },
+        // This closure defines and bioavailability of the system, e.g. the fraction of dose that is absorbed (and not lost)
         |_p| fa! {},
+        // This closure defines the initial conditions for the system
         |p, _t, _cov, x| {
             fetch_params!(
                 p, _SA, _SB, QA0, QB0, QT0, _FOA, _VAB, _VBA, _VBO, _KAB, _KBA, _KBO
             );
 
-            // In this closure we define the initial conditions for the system
+            // The states are defined here
             x[0] = QA0;
             x[1] = QB0;
             x[2] = QT0;
         },
+        // This closure defines the output of the system, e.g. the measured concentrations
         |x, p, _t, _cov, y| {
             fetch_params!(
                 p, SA, SB, _QA0, _QB0, _QT0, _FOA, _VAB, _VBA, _VBO, _KAB, _KBA, _KBO
@@ -79,15 +82,16 @@ fn main() {
             // This equation specifies the output, e.g. the measured concentrations
             let QA = x[0];
             let QB = x[1];
-            let QT = x[2];
+            let QT = QA + QB;
 
             y[0] = QA / SA;
             y[1] = QB / SB;
             y[2] = QT / (SA + SB);
         },
+        // This closure is necessary to define the number of states and output equations, in order to allocate memory
         (3, 3),
     );
 
     let op = ode.estimate_predictions(&subject, &spp);
-    dbg!(op.flat_predictions());
+    println!("{:?}", op);
 }
